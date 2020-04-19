@@ -6,16 +6,19 @@ import azure.cosmos.cosmos_client as cosmos_client
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function processed a request.')
     
-    readings_table = get_readings_table()
-    if not readings_table:
-        return func.HttpResponse("can't connect to database", status_code=500)
+    client = get_client()
+    
+    if not client:
+        return func.HttpResponse("can't connect to Azure client", status_code=500)
 
-    if not insert_reading(req, readings_table):
+    collection = get_collection_url()
+
+    if not insert_reading(req, client, collection):
         return func.HttpResponse("can't insert into database", status_code=500)
 
     return func.HttpResponse("data received", status_code=200)
 
-def insert_reading(req, container):
+def insert_reading(req, client, collection):
     sensor_id = get_param(req, 'sensor_id')
     date = get_param(req, 'date')
     time = get_param(req, 'time')
@@ -30,8 +33,12 @@ def insert_reading(req, container):
 	    "humidity": humidity
     }
 
-    container.create_item(reading) # broken
-    return True
+    try:
+        client.CreateItem(collection, reading)
+        return True
+    except:
+        return False
+
 
 # gets a parameter from a request, checks both URL and JSON parameters
 def get_param(req, param_name):
@@ -46,16 +53,18 @@ def get_param(req, param_name):
     
     return param
 
-def get_readings_table():
+def get_client():
+    url = "https://localhost:8081"
+    # this is an emulator key, good luck stealing my credits
+    key = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
+
     try:
-        url = "https://localhost:8081"
-        key = "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
-        name = "aqm_db"
-        container_id = 'sensor_readings'
-
-        db_client = cosmos_client.CosmosClient(url, {'masterKey': key})
-        container = db_client.ReadContainer("dbs/" + name + "/colls/" + container_id)
-
-        return container
+        client = cosmos_client.CosmosClient(url, {'masterKey': key})
+        return client
     except:
         return False
+
+def get_collection_url():
+    name = "aqm_db"
+    container_id = 'sensor_readings'
+    return ("dbs/" + name + "/colls/" + container_id)
